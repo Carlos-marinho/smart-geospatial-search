@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapa de Locais</title>
+    
+    <!-- Estilos do Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+    <style>
+        #map { height: 500px; width: 100%; }
+        body { font-family: Arial, sans-serif; text-align: center; }
+        input, button, select { margin: 5px; padding: 10px; }
+        #radius-value { font-weight: bold; }
+
+        .leaflet-div-icon {
+            background: none;
+            border: none;
+            font-size: 12px;
+            font-weight: bold;
+            color: black;
+            text-align: center;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Busca de Locais Próximos</h2>
+
+    <!-- Entrada de endereço -->
+    <input type="text" id="endereco" placeholder="Digite um endereço ou use sua localização atual">
+    
+    <!-- Seleção de categoria -->
+    <select id="categoria">
+        <option value="restaurant">Restaurante</option>
+        <option value="cafe">Café</option>
+        <option value="hotel">Hotel</option>
+        <option value="hospital">Hospital</option>
+        <option value="park">Parque</option>
+        <option value="supermarket">Supermercado</option>
+    </select>
+
+    <!-- Controle de Raio -->
+    <label for="raio">Raio: <span id="radius-value">5000</span> metros</label>
+    <input type="range" id="raio" min="1000" max="10000" step="500" value="5000" oninput="document.getElementById('radius-value').textContent = this.value">
+
+    <br>
+    <button onclick="buscarLocais()">Buscar</button>
+    <button onclick="usarLocalizacao()">Usar Minha Localização</button>
+
+    <!-- Mapa -->
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([-23.563099, -46.654499], 13); // Posição inicial: São Paulo
+
+        // Adiciona o mapa base (OpenStreetMap)
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 18,
+        }).addTo(map);
+
+        function buscarLocais(lat = null, lon = null) {
+            let endereco = document.getElementById("endereco").value;
+            let categoria = document.getElementById("categoria").value;
+            let raio = document.getElementById("raio").value;
+            let url = `/buscar-locais/?categoria=${categoria}&raio=${raio}`;
+
+            if (lat && lon) {
+                url += `&lat=${lat}&lon=${lon}`;
+            } else if (endereco) {
+                url += `&endereco=${encodeURIComponent(endereco)}`;
+            } else {
+                alert("Digite um endereço ou use sua localização.");
+                return;
+            }
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    map.eachLayer(layer => {
+                        if (!!layer.toGeoJSON) { map.removeLayer(layer); }
+                    });
+
+                    // Atualiza a visualização do mapa para o centro da busca
+                    let searchLat = parseFloat(data.resultado[0].latitude);
+                    let searchLon = parseFloat(data.resultado[0].longitude);
+                    map.setView([searchLat, searchLon], 14); // Zoom ajustável
+
+                    data.resultado.forEach(local => {
+                        // Criando o marcador normal
+                        let marker = L.marker([local.latitude, local.longitude]).addTo(map);
+                        
+                         // Pegando o endereço completo e garantindo que tem um número
+                        let endereco_parts = local.endereco.split(",");
+                        let endereco_curto = endereco_parts.length > 1 ? endereco_parts[0] + ", " + endereco_parts[1] : endereco_parts[0];
+
+                        // Criando o ícone com o nome do local
+                        let label = L.divIcon({
+                            className: 'leaflet-div-icon',
+                            html: `<b>${local.nome}</b><br><small>${endereco_curto}</small>`,
+                        });
+
+                        // Adicionando o nome ao mapa na mesma posição do marcador
+                        L.marker([local.latitude, local.longitude], { icon: label }).addTo(map);
+                    });
+                })
+                .catch(error => console.error("Erro ao buscar locais:", error));
+        }
+
+        function usarLocalizacao() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    let lat = position.coords.latitude;
+                    let lon = position.coords.longitude;
+                    map.setView([lat, lon], 14);
+                    buscarLocais(lat, lon);
+                }, () => alert("Não foi possível obter sua localização."));
+            } else {
+                alert("Geolocalização não suportada pelo navegador.");
+            }
+        }
+    </script>
+
+</body>
+</html>
